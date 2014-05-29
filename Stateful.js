@@ -276,12 +276,12 @@ define([
 			var shadowPropName = propNames(name).p;
 			var oldValue = this[shadowPropName];
 			this[shadowPropName] = value;
-			if (this._watchCallbacks) {
+			if (!Stateful.useObserve && this._watchCallbacks) {
 				this._watchCallbacks(name, oldValue, value);
 			}
 			// Even if Object.observe() is natively available,
 			// automatic change record emission won't happen if there is a ECMAScript setter
-			!areSameValues(value, oldValue) && Observable.getNotifier(this).notify({
+			Stateful.useObserve && !areSameValues(value, oldValue) && Observable.getNotifier(this).notify({
 				// Property is never new because setting up shadow property defines the property
 				type: Observable.CHANGETYPE_UPDATE,
 				object: this,
