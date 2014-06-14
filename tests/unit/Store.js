@@ -7,6 +7,7 @@ define([
 	var C = register("test-store", [HTMLElement, Widget, Store]);
 	var M = declare([Memory, Observable], {});
 	registerSuite({
+		name: "delite/Store",
 /*
 // commented out until https://github.com/ibm-js/delite/issues/93 fixed
 		"Error" : function () {
@@ -58,9 +59,9 @@ define([
 		"NullStore": function () {
 			var d = this.async(1500);
 			var store = new C();
-			store.on("query-success", d.callback(function () {
+			setTimeout(d.callback(function () {
 				assert.equal(store.renderItems.length, 0);
-			}));
+			}), 500); // delite/Store with null store no loger fires query-success
 			store.startup();
 			store.store = null;
 			return d;

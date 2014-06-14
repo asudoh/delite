@@ -1,6 +1,8 @@
-/** @module delite/Store */
-define(["dcl/dcl", "dojo/when", "./Invalidating"], function (dcl, when, Invalidating) {
-
+define([
+	"dcl/dcl",
+	"dojo/when",
+	"./Invalidating"
+], function (dcl, when, Invalidating) {
 	var isStoreInvalidated = function (props) {
 		return props.store || props.query;
 	};
@@ -8,6 +10,12 @@ define(["dcl/dcl", "dojo/when", "./Invalidating"], function (dcl, when, Invalida
 	var setStoreValidate = function (props) {
 		props.store = props.query = false;
 	};
+
+	function getObservableArrayClz() {
+		try {
+			return require("liaison/ObservableArray");
+		} catch (e) {}
+	}
 
 	/**
 	 * Mixin for widgets for store management that creates widget render items from store items after
@@ -58,10 +66,11 @@ define(["dcl/dcl", "dojo/when", "./Invalidating"], function (dcl, when, Invalida
 			// we want to be able to wait for potentially several of those properties to be set before
 			// actually firing the store request
 			this.addInvalidatingProperties({
-					"store": "invalidateProperty",
-					"query": "invalidateProperty"
-				}
-			);
+				"store": "invalidateProperty",
+				"query": "invalidateProperty",
+				"renderItems": "invalidateProperty"
+			});
+			this.renderItems = []; // Set empty initial value
 		},
 
 		/**
@@ -94,8 +103,9 @@ define(["dcl/dcl", "dojo/when", "./Invalidating"], function (dcl, when, Invalida
 		 * @protected
 		 */
 		initItems: function (renderItems) {
-			this.renderItems = renderItems;
-			this.emit("query-success", { renderItems: renderItems, cancelable: false, bubbles: true });
+			// Make sure using push() method of this.renderItems
+			this.renderItems.push.apply(this.renderItems, renderItems);
+			this.emit("query-success", { renderItems: this.renderItems, cancelable: false, bubbles: true });
 		},
 
 		/**
@@ -105,7 +115,23 @@ define(["dcl/dcl", "dojo/when", "./Invalidating"], function (dcl, when, Invalida
 		 * @protected
 		 */
 		refreshProperties: function (props) {
-			if (isStoreInvalidated(props)) {
+			var storeInvalidated = isStoreInvalidated(props),
+				renderItemsInvalidated = props.renderItems;
+			if (renderItemsInvalidated) {
+				var old = this._hRenderItems && this._hRenderItems.renderItems;
+				this._unobserveRenderItems();
+				this._itemsSpliced([{object: this.renderItems || [], index: 0, removed: old || [], addedCount: 0}]);
+				var ObservableArray = getObservableArrayClz();
+				// Using a plain object here, as well as the following this._hRenderItems.renderItems thing,
+				// is a kludge to work around delite/Invalidating not sending out older value
+				this._hRenderItems = !ObservableArray || !ObservableArray.canObserve(this.renderItems) ? {} :
+					ObservableArray.observe(this.renderItems, this._itemsSpliced.bind(this));
+				this._hRenderItems.renderItems = this.renderItems;
+				this._itemsSpliced([
+					{object: this.renderItems, index: 0, removed: [], addedCount: this.renderItems.length}
+				]);
+			}
+			if (storeInvalidated) {
 				setStoreValidate(props);
 				this.queryStoreAndInitItems(this.processQueryResult);
 			}
@@ -131,13 +157,11 @@ define(["dcl/dcl", "dojo/when", "./Invalidating"], function (dcl, when, Invalida
 				if (collection.track) {
 					// user asked us to observe the store
 					collection = this._tracked = collection.track();
-					collection.on("add", this._itemAdded.bind(this));
-					collection.on("update", this._itemUpdated.bind(this));
-					collection.on("remove", this._itemRemoved.bind(this));
+					collection.on("add", this._storeItemAdded.bind(this));
+					collection.on("update", this._storeItemUpdated.bind(this));
+					collection.on("remove", this._storeItemRemoved.bind(this));
 				}
 				return this.fetch(collection);
-			} else {
-				this.initItems([]);
 			}
 		},
 
@@ -157,6 +181,15 @@ define(["dcl/dcl", "dojo/when", "./Invalidating"], function (dcl, when, Invalida
 			this.emit("query-error", { error: error, cancelable: false, bubbles: true });
 		},
 
+		_unobserveRenderItems: function () {
+			// There is a kludge that defines _hRenderItems as a plain object (instead of a handle)
+			// to work around delite/Invalidating not sending out older value
+			if (this._hRenderItems && typeof this._hRenderItems.remove === "function") {
+				this._hRenderItems.remove();
+				this._hRenderItems = null;
+			}
+		},
+
 		_untrack: function () {
 			if (this._tracked) {
 				this._tracked.tracking.remove();
@@ -165,62 +198,61 @@ define(["dcl/dcl", "dojo/when", "./Invalidating"], function (dcl, when, Invalida
 		},
 
 		destroy: function () {
+			this._unobserveRenderItems();
 			this._untrack();
 		},
 
-		/**
-		 * This method is called when an item is removed from an observable store. The default
-		 * implementation actually removes a renderItem from the renderItems array. This can be redefined but
-		 * must not be called directly.
-		 * @param {number} index - The index of the render item to remove.
-		 * @param {Object[]} renderItems - The array of render items to remove the render item from.
-		 * @protected
-		 */
-		itemRemoved: function (index, renderItems) {
-			renderItems.splice(index, 1);
+		_setRenderItemsAttr: function (renderItems) {
+			// We no longer use store if renderItems is explicitly set
+			this.store = null;
+			// Ensure renderItems is an array
+			this._set("renderItems", Array.isArray(renderItems) ? renderItems : []);
 		},
 
 		/**
-		 * This method is called when an item is added in an observable store. The default
-		 * implementation actually adds the renderItem to the renderItems array. This can be redefined but
-		 * must not be called directly.
-		 * @param {number} index - The index where to add the render item.
-		 * @param {Object} renderItem - The render item to be added.
-		 * @param {Object[]} renderItems - The array of render items to add the render item to.
+		 * This method is called when there are changes in `.renderItems`.
+		 * @param {module:liaison/Observable~ChangeRecord[]} splices
+		 *     The change records of splice,
+		 *     same format as {@link http://wiki.ecmascript.org/doku.php?id=harmony:observe ES7 Array.observe()}.
 		 * @protected
 		 */
-		itemAdded: function (index, renderItem, renderItems) {
-			renderItems.splice(index, 0, renderItem);
+		_itemsSpliced: function (splices) {
+			this.itemsSpliced(splices.map(function (splice) {
+				return {
+					object: splice.object,
+					index: splice.index,
+					removedCount: splice.removed.length,
+					added: splice.object.slice(splice.index, splice.index + splice.addedCount)
+				};
+			}));
 		},
 
 		/**
-		 * This method is called when an item is updated in an observable store. The default
-		 * implementation actually updates the renderItem in the renderItems array. This can be redefined but
-		 * must not be called directly.
-		 * @param {number} index - The index of the render item to update.
-		 * @param {Object} renderItem - The render item data the render item must be updated with.
-		 * @param {Object[]} renderItems - The array of render items to render item to be updated is part of.
+		 * This method is called when there are changes in `.renderItems`.
+		 * @param {Object[]} splices
+		 *     The change records of splice, slightly modified format of
+		 *     {@link http://wiki.ecmascript.org/doku.php?id=harmony:observe ES7 Array.observe()}.
 		 * @protected
 		 */
-		itemUpdated: function (index, renderItem, renderItems) {
-			// we want to keep the same item object and mixin new values into old object
-			dcl.mix(renderItems[index], renderItem);
-		},
+		itemsSpliced: function () {},
 
 		/**
-		 * This method is called when an item is moved in an observable store. The default
-		 * implementation actually moves the renderItem in the renderItems array. This can be redefined but
-		 * must not be called directly.
-		 * @param {number} previousIndex - The previous index of the render item.
-		 * @param {number} newIndex - The new index of the render item.
-		 * @param {Object} renderItem - The render item to be moved.
-		 * @param {Object[]} renderItems - The array of render items to render item to be moved is part of.
+		 * This method is called when there are collection mutations in store.
+		 * @param {Object[]} splices
+		 *     The change records of splice, slightly modified format of
+		 *     {@link http://wiki.ecmascript.org/doku.php?id=harmony:observe ES7 Array.observe()}.
 		 * @protected
 		 */
-		itemMoved: function (previousIndex, newIndex, renderItem, renderItems) {
-			// we want to keep the same item object and mixin new values into old object
-			this.itemRemoved(previousIndex, renderItems);
-			this.itemAdded(newIndex, renderItem, renderItems);
+		storeItemsSpliced: function (splices) {
+			var ObservableArray = getObservableArrayClz(),
+				renderItemsObservable = ObservableArray && ObservableArray.canObserve(this.renderItems);
+			splices.forEach(function (splice) {
+				this.renderItems.splice.apply(this.renderItems,
+					[splice.index, splice.removedCount].concat(splice.added));
+			}, this);
+			if (!renderItemsObservable) {
+				this.itemsSpliced(splices);
+			}
 		},
 
 		/**
@@ -229,10 +261,15 @@ define(["dcl/dcl", "dojo/when", "./Invalidating"], function (dcl, when, Invalida
 		 * @param {Event} event - The "remove" `dstore/Observable` event.
 		 * @protected
 		 */
-		_itemRemoved: function (event) {
+		_storeItemRemoved: function (event) {
 			if (event.previousIndex !== undefined) {
-				this.itemRemoved(event.previousIndex, this.renderItems);
-				this.renderItems = this.renderItems;
+				this.storeItemsSpliced([
+					{
+						index: event.previousIndex,
+						removedCount: 1,
+						added: []
+					}
+				]);
 			}
 			// if no previousIndex the items is removed outside of the range we monitor so we don't care
 		},
@@ -243,22 +280,53 @@ define(["dcl/dcl", "dojo/when", "./Invalidating"], function (dcl, when, Invalida
 		 * @param {Event} event - The "update" `dstore/Observable` event.
 		 * @private
 		 */
-		_itemUpdated: function (event) {
+		_storeItemUpdated: function (event) {
 			if (event.index === undefined) {
 				// this is actually a remove
-				this.itemRemoved(event.previousIndex, this.renderItems);
+				this.storeItemsSpliced([
+					{
+						index: event.previousIndex,
+						removedCount: 1,
+						added: []
+					}
+				]);
 			} else if (event.previousIndex === undefined) {
 				// this is actually a add
-				this.itemAdded(event.index, this.itemToRenderItem(event.target), this.renderItems);
+				this.storeItemsSpliced([
+					{
+						index: event.index,
+						removedCount: 1,
+						added: [this.itemToRenderItem(event.target)]
+					}
+				]);
 			} else if (event.index !== event.previousIndex) {
 				// this is a move
-				this.itemMoved(event.previousIndex, event.index, this.itemToRenderItem(event.target), this.renderItems);
+				this.storeItemsSpliced([
+					{
+						index: event.previousIndex,
+						removedCount: 1,
+						added: [],
+						// TODO: removedItemsWillBeBack is a kludgy way to tell
+						// that the removed items will be back to the collection,
+						// so that list-type widget can preserve selection in the condition, etc.
+						// In future, we may leverage the notion synthetic change record for "move" scenario.
+						removedItemsWillBeBack: true
+					},
+					{
+						index: event.index - (event.previousIndex < event.index ? 1 : 0),
+						removedCount: 0,
+						added: [this.itemToRenderItem(event.target)]
+					}
+				]);
 			} else {
-				// we want to keep the same item object and mixin new values into old object
-				this.itemUpdated(event.index, this.itemToRenderItem(event.target), this.renderItems);
+				this.storeItemsSpliced([
+					{
+						index: event.index,
+						removedCount: 1,
+						added: [this.itemToRenderItem(event.target)]
+					}
+				]);
 			}
-			// set back the modified items property
-			this.renderItems = this.renderItems;
 		},
 
 		/**
@@ -267,11 +335,15 @@ define(["dcl/dcl", "dojo/when", "./Invalidating"], function (dcl, when, Invalida
 		 * @param {Event} event - The "add" `dstore/Observable` event.
 		 * @private
 		 */
-		_itemAdded: function (event) {
+		_storeItemAdded: function (event) {
 			if (event.index !== undefined) {
-				this.itemAdded(event.index, this.itemToRenderItem(event.target), this.renderItems);
-				// set back the modified items property
-				this.renderItems = this.renderItems;
+				this.storeItemsSpliced([
+					{
+						index: event.index,
+						removedCount: 0,
+						added: [this.itemToRenderItem(event.target)]
+					}
+				]);
 			}
 			// if no index the item is added outside of the range we monitor so we don't care
 		}
