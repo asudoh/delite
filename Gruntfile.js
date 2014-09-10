@@ -81,6 +81,12 @@ module.exports = function (grunt) {
 							".",
 							"./README.md",
 							"./package.json"
+						],
+						paths: {
+							"decor": "../../../../decor/out/decor/0.2.0-beta/decor"
+						},
+						imports: [
+							"../decor/out"
 						]
 					}
 				]
