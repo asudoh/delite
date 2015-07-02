@@ -34,7 +34,7 @@ define([
 				if (this[name]) {
 					this.notifyCurrentValue(name);
 				}
-			});
+			}, this);
 		},
 
 		refreshRendering: function (oldVals) {

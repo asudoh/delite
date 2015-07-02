@@ -72,20 +72,42 @@ define([
 		//////////// INITIALIZATION METHODS ///////////////////////////////////////
 
 		createdCallback: function () {
-			this.preRender();
-			this.render();
-			this.postRender();
+			this.widgetId = ++cnt;
+
+			this.initializeInvalidating();
+
+			// "template" triggers widget to render (even if template was specified in the prototype and not changed).
+			// "dir" triggers computation of effectiveDir.
+			this.notifyCurrentValue("template", "dir");
 		},
 
-		computeProperties: function (props) {
-			if ("dir" in props) {
-				if ((/^(ltr|rtl)$/i).test(this._get("dir"))) {
-					this.effectiveDir = this._get("dir").toLowerCase();
-				} else {
-					this.effectiveDir = this.getInheritedDir();
+		computeProperties: dcl.advise({
+			around: function (sup) {
+				return function (props) {
+					sup.apply(this, arguments);
+					if ("dir" in props) {
+						if ((/^(ltr|rtl)$/i).test(this._get("dir"))) {
+							this.effectiveDir = this._get("dir").toLowerCase();
+						} else {
+							this.effectiveDir = this.getInheritedDir();
+						}
+					}
+				};
+			},
+			after: function (args) {
+				// Render the widget after the first computeProperties() call, and also whenever template is changed.
+				// Note: code is here rather than in refreshRendering() so that it can cancel redundant processing in
+				// refreshRendering().
+				if ("template" in args[0]) {
+					this.discardRendering();	// because no need to call refreshRendering() on properties in props
+					this.rendered = false;
+					this.preRender();
+					this.render();
+					this.postRender();
+					this.rendered = true;
 				}
 			}
-		},
+		}),
 
 		/**
 		 * Get the direction setting for the page itself.
@@ -128,7 +150,6 @@ define([
 		 * @protected
 		 */
 		preRender: function () {
-			this.widgetId = ++cnt;
 		},
 
 		/**
@@ -146,8 +167,18 @@ define([
 		 * @protected
 		 */
 		render: function () {
+			// Tear down old rendering (if there is one).
+			if (this._templateHandle) {
+				this._templateHandle.destroy();
+				delete this._templateHandle;
+			}
+
+			// Render the widget.
 			if (this.template) {
 				this._templateHandle = this.template(this.ownerDocument, register);
+				if (this.attached && !has("document-register-element")) {
+					this._templateHandle.attach();
+				}
 			}
 		},
 
@@ -199,11 +230,8 @@ define([
 		 * @protected
 		 */
 		postRender: function () {
-			this.initializeInvalidating();
-			if (this._templateHandle) {
-				this.notifyCurrentValue.apply(this, this._templateHandle.dependencies);
-			}
-			this.notifyCurrentValue("dir", "baseClass");	// "dir" triggers computation of effectiveDir
+			// trigger code to run in refreshRendering() that needs to happen on widget initialization
+			this.notifyCurrentValue("dir", "effectiveDir", "baseClass");
 		},
 
 		//////////// DESTROY FUNCTIONS ////////////////////////////////

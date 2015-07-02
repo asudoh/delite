@@ -84,7 +84,19 @@ define([
 		 */
 
 		postRender: function () {
-			this.notifyCurrentValue("tabStops");
+			// Move all initially specified aria- attributes to focus node(s).
+			// TODO: technically the aria- roles should be reapplied if tabStops is modified.
+			var attr, idx = 0;
+			while ((attr = this.attributes[idx++])) {
+				if (/^aria-/.test(attr.name)) {
+					this.setAttribute(attr.name, attr.value);
+
+					// force remove from root node not focus nodes
+					HTMLElement.prototype.removeAttribute.call(this, attr.name);
+				}
+			}
+
+			this.notifyCurrentValue("tabStops", "value", "disabled", "name");
 		},
 
 		/**
@@ -226,19 +238,6 @@ define([
 					sup.call(this, name);
 				}
 			};
-		}),
-
-		createdCallback: function () {
-			// Move all initially specified aria- attributes to focus node(s).
-			var attr, idx = 0;
-			while ((attr = this.attributes[idx++])) {
-				if (/^aria-/.test(attr.name)) {
-					this.setAttribute(attr.name, attr.value);
-
-					// force remove from root node not focus nodes
-					HTMLElement.prototype.removeAttribute.call(this, attr.name);
-				}
-			}
-		}
+		})
 	});
 });
