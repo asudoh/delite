@@ -76,38 +76,32 @@ define([
 
 			this.initializeInvalidating();
 
-			// "template" triggers widget to render (even if template was specified in the prototype and not changed).
-			// "dir" triggers computation of effectiveDir.
-			this.notifyCurrentValue("template", "dir");
+			// trigger computation of effectiveDir in computeProperties().
+			this.notifyCurrentValue("dir");
 		},
 
-		computeProperties: dcl.advise({
-			around: function (sup) {
-				return function (props) {
-					sup.apply(this, arguments);
-					if ("dir" in props) {
-						if ((/^(ltr|rtl)$/i).test(this._get("dir"))) {
-							this.effectiveDir = this._get("dir").toLowerCase();
-						} else {
-							this.effectiveDir = this.getInheritedDir();
-						}
-					}
-				};
-			},
-			after: function (args) {
-				// Render the widget after the first computeProperties() call, and also whenever template is changed.
-				// Note: code is here rather than in refreshRendering() so that it can cancel redundant processing in
-				// refreshRendering().
-				if ("template" in args[0]) {
-					this.discardRendering();	// because no need to call refreshRendering() on properties in props
-					this.rendered = false;
-					this.preRender();
-					this.render();
-					this.postRender();
-					this.rendered = true;
+		computeProperties: function (props) {
+			if ("dir" in props) {
+				if ((/^(ltr|rtl)$/i).test(this._get("dir"))) {
+					this.effectiveDir = this._get("dir").toLowerCase();
+				} else {
+					this.effectiveDir = this.getInheritedDir();
 				}
 			}
-		}),
+		},
+
+		shouldInitializeRendering: function (oldVals) {
+			// render the template on widget creation and also whenever app changes template prop
+			return !this.rendered || "template" in oldVals;
+		},
+
+		initializeRendering: function () {
+			this.rendered = false;
+			this.preRender();
+			this.render();
+			this.postRender();
+			this.rendered = true;
+		},
 
 		/**
 		 * Get the direction setting for the page itself.
@@ -119,18 +113,18 @@ define([
 		},
 
 		// Override Invalidating#refreshRendering() to execute the template's refreshRendering() code, etc.
-		refreshRendering: function (oldVals) {
-			if (this._templateHandle) {
+		refreshRendering: function (oldVals, justRendered) {
+			if (this._templateHandle && !justRendered) {
 				this._templateHandle.refresh(oldVals);
 			}
 
-			if ("baseClass" in oldVals) {
+			if (justRendered || "baseClass" in oldVals) {
 				$(this).removeClass(oldVals.baseClass).addClass(this.baseClass);
 			}
-			if ("effectiveDir" in oldVals) {
+			if (justRendered || "effectiveDir" in oldVals) {
 				$(this).toggleClass("d-rtl", this.effectiveDir === "rtl");
 			}
-			if ("dir" in oldVals) {
+			if (justRendered || "dir" in oldVals) {
 				this.style.direction = this._get("dir");
 			}
 		},
@@ -230,8 +224,6 @@ define([
 		 * @protected
 		 */
 		postRender: function () {
-			// trigger code to run in refreshRendering() that needs to happen on widget initialization
-			this.notifyCurrentValue("dir", "effectiveDir", "baseClass");
 		},
 
 		//////////// DESTROY FUNCTIONS ////////////////////////////////

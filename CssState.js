@@ -29,28 +29,20 @@ define([
 		 */
 		booleanCssProps: ["disabled", "readOnly", "selected", "opened"],
 
-		postRender: function () {
-			["checked", "state"].concat(this.booleanCssProps).forEach(function (name) {
-				if (this[name]) {
-					this.notifyCurrentValue(name);
-				}
-			}, this);
-		},
-
-		refreshRendering: function (oldVals) {
+		refreshRendering: function (oldVals, justRendered) {
 			// Monitoring changes to disabled, readonly, etc. state, and update CSS class of root node
 			this.booleanCssProps.forEach(function (name) {
-				if (name in oldVals) {
+				if (justRendered || name in oldVals) {
 					$(this).toggleClass("d-" + name.toLowerCase(), this[name]);
 				}
 			}, this);
-			if ("checked" in oldVals) {
+			if (justRendered || "checked" in oldVals) {
 				$(this).removeClass(oldVals.checked === "mixed" ? "d-mixed" : "d-checked");
 				if (this.checked) {
 					$(this).addClass(this.checked === "mixed" ? "d-mixed" : "d-checked");
 				}
 			}
-			if ("state" in oldVals) {
+			if (justRendered || "state" in oldVals) {
 				$(this).removeClass("d-" + oldVals.state.toLowerCase()).addClass("d-" + this.state.toLowerCase());
 			}
 		}

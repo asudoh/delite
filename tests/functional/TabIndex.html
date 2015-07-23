@@ -32,11 +32,6 @@
 					this.appendChild(this.labelNode);
 				},
 
-				postRender: function () {
-					// label and tabIndex code in refreshRendering() needs to run on widget creation
-					this.notifyCurrentValue("label", "tabIndex");
-				},
-
 				// dcl.after() to avoid spurious failure on chrome, TODO: investigate more later
 				attachedCallback: register.after(function () {
 					// Test that observe() is working.
@@ -47,11 +42,11 @@
 					});
 				}),
 
-				refreshRendering: function (props) {
-					if ("tabIndex" in props) {
+				refreshRendering: function (props, justRendered) {
+					if (justRendered || "tabIndex" in props) {
 						this.labelNode.tabIndex = this._get("tabIndex");
 					}
-					if ("label" in props) {
+					if (justRendered || "label" in props) {
 						this.labelNode.textContent = this.label;
 					}
 				}

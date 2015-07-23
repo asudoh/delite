@@ -95,8 +95,6 @@ define([
 					HTMLElement.prototype.removeAttribute.call(this, attr.name);
 				}
 			}
-
-			this.notifyCurrentValue("tabStops", "value", "disabled", "name");
 		},
 
 		/**
@@ -110,7 +108,9 @@ define([
 		 * @default undefined
 		 */
 
-		refreshRendering: function (oldValues) {
+		refreshRendering: function (oldValues, justRendered) {
+			/* jshint maxcomplexity:14 */
+
 			// Handle disabled and tabIndex, across the tabStops and root node.
 			// No special processing is needed for tabStops other than just to refresh disabled and tabIndex.
 
@@ -125,7 +125,8 @@ define([
 
 			// Set tabIndex etc. for all tabbable nodes.
 			// To keep things simple, if anything has changed then reapply all the properties.
-			if ("tabStops" in oldValues || "tabIndex" in oldValues || "disabled" in oldValues || "alt" in oldValues) {
+			if (justRendered || "tabStops" in oldValues || "tabIndex" in oldValues ||
+					"disabled" in oldValues || "alt" in oldValues) {
 				this.forEachFocusNode(function (node) {
 					node.disabled = this.disabled;
 					if (this.disabled) {
@@ -142,13 +143,13 @@ define([
 			// Set properties on valueNode.
 			var valueNode = this.valueNode !== this && this.valueNode;
 			if (valueNode) {
-				if ("value" in oldValues) {
+				if (justRendered || "value" in oldValues) {
 					valueNode.value = this.value;
 				}
-				if ("disabled" in oldValues) {
+				if (justRendered || "disabled" in oldValues) {
 					valueNode.disabled = this.disabled; // prevent submit
 				}
-				if ("name" in oldValues) {
+				if (justRendered || "name" in oldValues) {
 					valueNode.name = this.name;
 				}
 			}

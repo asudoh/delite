@@ -17,9 +17,12 @@ Declarative creation:
 2. Parameters specified as DOMNode attributes (ex: `<d-slider max=10>`) are mixed into the widget, thus calling
    custom setters.
 3. `attachedCallback()` callback.
-4. `preRender()` callback executed.
-5. `render()` callback executed.  Note though that the root node already exists.
-6. `postRender()` callback executed.
+4. `computeProperties()` called with hash of parameters specified as DOMNode attributes.
+5. `preRender()` callback executed.
+6. `render()` callback executed.  Note though that the root node already exists.
+7. `postRender()` callback executed.
+8. `refreshRendering(hash, true)` called with hash of parameters specified as DOMNode attributes,
+   but with `true` boolean flag to indicate that `render()` was just called.
 
 Programmatic creation is:
 
@@ -28,9 +31,12 @@ Programmatic creation is:
 2. Parameters specified programatically
    (ex: `new MyWidget({title: "..."})`) are mixed into the widget, thus calling
    custom setters.
-3. `preRender()` callback executed.
-4. `render()` callback executed.   Note though that the root node already exists.
-5. `postRender()` callback executed.
+3. `computeProperties()` called with hash of parameters specified as DOMNode attributes.
+4. `preRender()` callback executed.
+5. `render()` callback executed.   Note though that the root node already exists.
+6. `postRender()` callback executed.
+7. `refreshRendering(hash, true)` called with hash of parameters specified to widget's constructor,
+   but with `true` boolean flag to indicate that `render()` was just called.
 
 `attachedCallback()` will be called automatically, although asynchronously, when the widget is attached to the
 document.
