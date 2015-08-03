@@ -98,10 +98,12 @@ define(["dcl/dcl", "decor/Invalidating"], function (dcl, Invalidating) {
 		 * If the store parameters are invalidated, queries the store, creates the render items and calls initItems() 
 		 * when ready. If an error occurs a 'query-error' event will be fired.
 		 * @param props
+		 * @param isAfterCreation
 		 * @protected
 		 */
-		computeProperties: function (props) {
-			if ("store" in props || "query" in props) {
+		computeProperties: function (props, isAfterCreation) {
+			// If this call is upon widget creation but `this.store` is not available, don't bother querying store
+			if (("store" in props || "query" in props) && (this.store || !isAfterCreation)) {
 				this.queryStoreAndInitItems(this.processQueryResult);
 			}
 		},

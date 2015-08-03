@@ -259,7 +259,14 @@ define([
 		// Create a constructor method to return a DOMNode representing this widget.
 		var tagConstructor = function (params) {
 			// Create new widget node or upgrade existing node to widget
-			var node = createElement(tag);
+			var node;
+
+			try {
+				register.creatingElementInTagConstructor = true;
+				node = createElement(tag);
+			} finally {
+				register.creatingElementInTagConstructor = false;
+			}
 
 			// Set parameters on node
 			for (var name in params || {}) {
@@ -270,6 +277,9 @@ define([
 				} else {
 					node[name] = params[name];
 				}
+			}
+			if (node.initializeInvalidating) {
+				node.initializeInvalidating();
 			}
 			if (node.deliver) {
 				node.deliver();
@@ -597,6 +607,13 @@ define([
 	 * @function module:delite/register.superCall
 	 */
 	register.superCall = dcl.superCall;
+
+	/**
+	 * A flag to mark element is being creted in tagConstructor
+	 * so that custom element's lifecycle callback knows it's in use.
+	 * @type {Boolean}
+	 */
+	register.creatingElementInTagConstructor = false;
 
 	return register;
 });
