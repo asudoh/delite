@@ -71,18 +71,10 @@ define([
 
 		//////////// INITIALIZATION METHODS ///////////////////////////////////////
 
-		createdCallback: dcl.advise({
-			before: function () {
-				this.widgetId = ++cnt;
-			},
-
-			after: function () {
-				// Start observing for changes in widget properties.
-				if (!register.creatingElementInTagConstructor) {
-					this.initializeInvalidating();
-				}
-			}
-		}),
+		createdCallback: function () {
+			this.widgetId = ++cnt;
+			this.initializeInvalidating();
+		},
 
 		computeProperties: function (props) {
 			if ("dir" in props) {

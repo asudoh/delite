@@ -259,14 +259,7 @@ define([
 		// Create a constructor method to return a DOMNode representing this widget.
 		var tagConstructor = function (params) {
 			// Create new widget node or upgrade existing node to widget
-			var node;
-
-			try {
-				register.creatingElementInTagConstructor = true;
-				node = createElement(tag);
-			} finally {
-				register.creatingElementInTagConstructor = false;
-			}
+			var node = createElement(tag);
 
 			// Set parameters on node
 			for (var name in params || {}) {
@@ -277,9 +270,6 @@ define([
 				} else {
 					node[name] = params[name];
 				}
-			}
-			if (node.initializeInvalidating) {
-				node.initializeInvalidating();
 			}
 			if (node.deliver) {
 				node.deliver();
